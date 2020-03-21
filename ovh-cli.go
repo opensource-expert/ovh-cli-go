@@ -1,6 +1,6 @@
 // vim: set ts=4 sw=4 sts=4 et:
 //
-// ovh-cli-go is a command line tool for manipulating OVH api
+// ovh-cli is a command line tool for manipulating OVH api
 // See: https://eu.api.ovh.com/console/
 //
 package main
@@ -21,49 +21,57 @@ import (
 	"strings"
 )
 
-// vars defined at compile time
-// https://github.com/ahmetb/govvv
-var (
-	Version        string
-	BuildDate      string
-	GitCommit      string
-	GoBuildVersion string
-)
-
 var copyleft = `
-Copyleft (Ɔ)  2020 Sylvain Viart
-License GPLv3 <https://www.gnu.org/licenses/gpl-3.0.txt>.
+Copyleft  (Ɔ)   2020 Sylvain Viart.
+Issues:   https://github.com/opensource-expert/ovh-cli/issues
+License   GPLv3 <https://www.gnu.org/licenses/gpl-3.0.txt>.
 This is free software: you are free to change and redistribute it.
 There is NO WARRANTY, to the extent permitted by law.
 `
 
-// Version will be build by main()
-var Ovh_cli_Version string
-
 var Usage string = `Shell interface for OVH API
 
 Usage:
-  ovh-cli-go [--debug] METHOD URL_API [JSON_INPUT]
+  ovh-cli [--debug] METHOD URL_API [JSON_INPUT]
 
 Options:
-  -h, --help              This help message in docopt format.
-  -v, --version           Show program version anl Licence.
-  --debug                 Output extra debug information on stderr.
+  -h, --help         This help message.
+  -v, --version      Show program version and Licence.
+  --debug            Output extra debug information on stderr.
 
 Arguments:
-  METHOD                  GET | PUT | POST | DELETE to be passed to the API.
-  URL_API                 OVH URL of the API without '/1.0/' prefix.
-  JSON_INPUT              Parameter API can be tansmitted via command line argument.
-                          Or it can be passed from stdin. If both are passed
-                          they stdin will take precedance.
+  METHOD             GET | PUT | POST | DELETE to be passed to the API.
+  URL_API            OVH URL of the API without '/1.0/' prefix.
+  JSON_INPUT         Parameter for the API, it can be tansmitted via
+                     command line argument. Or it can be passed from
+                     stdin. If both are passed, then stdin will take
+                     precedance.
 
 Examples:
-  ovh-cli-go  GET /me
-
-  ovh-cli-go  GET /cloud/project/
-  ovh-cli-go  GET /cloud/project/$project_id
-  echo '{ "description" : "change-project-name-here"}' | ovh-cli-go  PUT /cloud/project/$project_id
+  ovh-cli  GET /me
+  ovh-cli  GET /cloud/project/
+  ovh-cli  GET /cloud/project/$project_id
+  echo '{ "description" : "change-project-name-here"}' | ovh-cli  PUT /cloud/project/$project_id
+  # othe form as argument JSON_INPUT
+  ovh-cli  PUT /cloud/project/$project_id '{ "description" : "change-project-name-here"}'
 `
+
+// vars defined at compile time
+var (
+	// defined by https://github.com/ahmetb/govvv
+	BuildDate string
+	GitCommit string
+
+	// contents of ./VERSION file
+	Version string
+
+	// defined by Makefile
+	GoBuildVersion string
+	ByUser         string
+
+	// will be built by main()
+	Ovh_cli_Version string
+)
 
 var Debug bool = false
 
@@ -144,19 +152,21 @@ func Debug_print(f string, args ...interface{}) {
 	}
 }
 
-// Instantiate an OVH client and get the firstname of the currently logged-in user.
-// Visit https://api.ovh.com/createToken/index.cgi?GET=/me to get your credentials.
+// ====================================================================== main
+
 func main() {
+	// prepare our command line parser
 	parser := &docopt.Parser{
-		OptionsFirst:  true,
-		SkipHelpFlags: true,
+		OptionsFirst: true,
 	}
 
 	// build the Version string
-	Ovh_cli_Version = fmt.Sprintf("ovh-cli-go %s commit %s built at %s\nbuilt from: %s\n%s",
+	// Global are filed by
+	Ovh_cli_Version = fmt.Sprintf("ovh-cli %s commit %s built at %s by %s\nbuilt from: %s\n%s",
 		Version,
 		GitCommit,
 		BuildDate,
+		ByUser,
 		GoBuildVersion,
 		strings.TrimSpace(copyleft))
 
