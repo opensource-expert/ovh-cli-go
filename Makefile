@@ -5,13 +5,12 @@
 # dependancies
 GOVVV=${GOPATH}/bin/govvv
 
-# keep this as first target for development
+#= = = = = = = = = = = = = = = = = = = =  keep this as first target for development
 # build 64 bits version
 # govvv define main.Version with the contents of ./VERSION file, if exists
-BUILD_FLAGS=$(shell govvv -flags)
-BUILD_FLAGS:=${BUILD_FLAGS} -X 'main.GoBuildVersion=$$(go version)' -X 'main.ByUser=${USER}'
+BUILD_FLAGS=$(shell ./get_ldflags.sh)
 ovh-cli: ovh-cli.go Makefile ${GOVVV} VERSION
-	go build -o $@ -ldflags "${BUILD_FLAGS}" ovh-cli.go
+	go build -o $@ -ldflags "${BUILD_FLAGS}"
 
 ${GOVVV}:
 	go get github.com/ahmetb/govvv

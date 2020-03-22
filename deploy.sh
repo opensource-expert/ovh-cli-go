@@ -2,16 +2,18 @@
 #
 # Tools for deploying our release to github
 #
-# Usage: ./deploy.sh deploy [-n] [-r REMOTE_REPOS] [--replace] [-u GITHUB_USER] [RELEASE_VERSION]
-#        ./deploy.sh build [RELEASE_VERSION]
-#        ./deploy.sh delete RELEASE_VERSION
+# Usage: ./deploy.sh [--debug] deploy [-n] [-r REMOTE_REPOS] [--replace] [-u GITHUB_USER] [RELEASE_VERSION]
+#        ./deploy.sh [--debug] build [RELEASE_VERSION]
+#        ./deploy.sh [--debug] delete RELEASE_VERSION
+#        ./deploy.sh [--debug] init
 #
 # Options:
-#   -n                   Dry run, show with version, files and description
+#   -n                   Dry run, show with version, files and description.
 #   -r REMOTE_REPOS      Specify a REMOTE_REPOS name [default: origin]
 #   --replace            Replace existing release with this one, previous release
 #                        will be deleted first.
-#   -u GITHUB_USER       force this GITHUB_USER
+#   -u GITHUB_USER       force this GITHUB_USER.
+#   --debug              output debug information.
 #
 # Arguments:
 #   RELEASE_VERSION      a git tag, or current for the local modified version
@@ -20,9 +22,13 @@
 #   build      only build using gox and deployment.yml config
 #   deploy     prepare and deploy the release
 #   delete     delete the given RELEASE_VERSION from github and all assets
+#   init       initilise deploy.sh environment and creates deployment.yml
 #
 # deploy.sh reads description and name for releases in deployment.yml
 
+# ^^^  keep empty line above for docopts.sh parsing ^^^
+
+# ============================================================ GLOBALS
 
 DEPLOYMENT_FILE=deployment.yml
 # change GITHUB_USER + GITHUB_REPO to change repository, it is for building API URL
@@ -30,7 +36,79 @@ GITHUB_USER=opensource-expert
 GITHUB_REPO=ovh-cli-go
 TAG="$(cat VERSION)"
 BUILD_DEST_DIR=build
-DOCOPTS_PATH=~/.local/bin
+TMP_DIR=/tmp
+
+# ====================================================================== helpers
+fail()
+{
+  error "${BASH_SOURCE[1]}:${FUNCNAME[1]}:${BASH_LINENO[0]}: $*"
+  exit 1
+}
+
+error()
+{
+  # write on stderr
+  >&2 echo "error: $*"
+}
+
+# non maskable output (bats stderr kept on $output)
+debug()
+{
+  if [[ $DEBUG -eq 1 ]] ; then
+    # write on non standar non stdout non stderr descriptor
+    echo "[tty]debug: $*" > /dev/tty
+  fi
+}
+
+# stop_script is the main function which kill INT (Ctrl-C) your script
+# it doesn't exit because you can source it too.
+# you don't have to call this function unless you extend some fail_if function
+stop_script()
+{
+  # test whether we are in interactive shell or not
+  if [[ $- == *i* ]]
+  then
+    # autokill INT myself = STOP
+    kill -INT $$
+  else
+    exit $1
+  fi
+}
+
+fail_if_dir_not_exists()
+{
+  local d=$1
+  if [[ ! -d "$d" ]] ; then
+    error "folder not found: '$d' at ${BASH_SOURCE[1]}:${FUNCNAME[1]} line ${BASH_LINENO[0]}"
+    stop_script 3
+  fi
+}
+
+fail_if_file_not_exists()
+{
+  local f=$1
+  if [[ ! -f "$f" ]] ; then
+    error "file not found: '$f' at ${BASH_SOURCE[1]}:${FUNCNAME[1]} line ${BASH_LINENO[0]}"
+    stop_script 3
+  fi
+}
+
+fail_if_empty()
+{
+  local varname
+  local v
+  # allow multiple check on the same line
+  for varname in $*
+  do
+    eval "v=\$$varname"
+    if [[ -z "$v" ]] ; then
+      error "$varname empty or unset at ${BASH_SOURCE[1]}:${FUNCNAME[1]} line ${BASH_LINENO[0]}"
+      stop_script 4
+    fi
+  done
+}
+
+#====================================================================== functions
 
 create_release()
 {
@@ -129,38 +207,55 @@ get_arch_build_target()
   fi
 }
 
+# copy all current project to a folder
+# if $dest_dir is a sub-folder it is excluded
+sync_src_to()
+{
+  local dest_dir=${1%/}
+  fail_if_dir_not_exists $dest_dir
+  rsync -a \
+    --exclude=$dest_dir \
+    --exclude=.git \
+    --exclude=.*.swp \
+    --exclude=.*.swo \
+    ./ $dest_dir/
+}
+
 build_binaries()
 {
   local release=$1
   local build_dest_dir=$2
+  local target=$3
 
   local ldflags
 
+	# ldflags are synchronised with Makefile through ./get_ldflags.sh
+  # current is an alias for using the current code not a tag
   if [[ $release == current ]] ; then
-    cp docopts.go $build_dest_dir
-    # will user ./VERSION to get the version
-    ldflags="$(govvv -flags)"
+    # will use ./VERSION to get the version
+
+    #sync_src_to "$build_dest_dir"
+
+    # ldflags are read in the source directory
+    # govvv will fail if .git is missing
+    ldflags="$(./get_ldflags.sh)"
   else
-    # checkout release version to $BUILD_DEST_DIR and build it from here
-    git show $release:./docopts.go > $build_dest_dir/docopts.go
+    # checkout a release version to $BUILD_DEST_DIR and build it from here
+
     # we force the version to be $release.
-    # before version v0.6.3-rc1. this will overwrite code version string.
-    # Which produces a binary diffrent from `go build` (on those older source) for --version
-    ldflags="$(govvv -flags -version "$release")"
+    #git archive --format=tar $release | (cd $build_dest_dir && tar xf -)
+
+    ldflags="$(./get_ldflags.sh "$(govvv -flags -version "$release")")"
   fi
 
-	# ldflags need to be synchronised with Makefile
-  local go_version="$(go version)"
-  ldflags+=" -X 'main.GoBuildVersion=$go_version'"
-
   local osarch="$(get_arch_build_target gox)"
-  # chdir to the build_dest_dir, use the docopts.go copy for source to compile.
-  pushd $build_dest_dir > /dev/null
-    # -output allow to force generated binaries
-    gox -osarch "$osarch" -output="docopts_{{.OS}}_{{.Arch}}" -ldflags "$ldflags"
-  popd > /dev/null
+
+  # -output allow to force generated binaries format and destination
+  gox -osarch "$osarch" -output="${build_dest_dir}/${target}_{{.OS}}_{{.Arch}}" -ldflags "$ldflags"
 }
 
+# fetch all yaml subkeys from the given file.yml from key KEY
+# Call: yaml_keys FILE_YAML KEY
 yaml_keys()
 {
   # yq seems to young software, quick fix to get keys
@@ -192,6 +287,7 @@ $(indent "$description")
 EOT
 }
 
+# validate that the deployment.yml file and other collectable data
 check_name_description()
 {
   local release=$1
@@ -214,7 +310,7 @@ main_deploy()
   local release=$1
   local release_version=$release
 
-  # redefine GITHUB_TOKEN to test if exported for strict mode
+  # redefine GITHUB_TOKEN (to test if exported for bash strict mode)
   GITHUB_TOKEN=${GITHUB_TOKEN:-}
 
   if [[ $release == current ]] ; then
@@ -224,11 +320,13 @@ main_deploy()
 
   local description=$(yq.v2 r $DEPLOYMENT_FILE "releases[$release_version].description")
   local name=$(yq.v2 r $DEPLOYMENT_FILE "releases[$release_version].name")
+  local name=$(yq.v2 r $DEPLOYMENT_FILE "releases[$release_version].name")
+  local target=$(yq.v2 r $DEPLOYMENT_FILE "target")
 
   # will stop the execution (as set -e is enabled)
   check_name_description $release_version "$name" "$description"
 
-  build_binaries $release $BUILD_DEST_DIR
+  build_binaries $release $BUILD_DEST_DIR $target
   UPLOAD_FILES=$(prepare_upload $BUILD_DEST_DIR)
 
   if $ARGS_n ; then
@@ -271,25 +369,105 @@ check_env()
   do
     eval "val=\${$v:-}"
     if [[ -z $val ]] ; then
-      echo "$v is undefined, check failed"
+      error "$v is undefined, check failed"
+      error=$((error+1))
+    fi
+  done
+
+  # we use docopts so i must be installed
+  for v in docopts docopts.sh
+  do
+    if ! command -v $v > /dev/null ; then
+      error "$v is not in PATH, check failed"
       error=$((error+1))
     fi
   done
   return $error
 }
 
+check_build_dir()
+{
+  local build_dest_dir=$1
+  if [[ -d $build_dest_dir ]] ; then
+    return 0
+  else
+    error "build_dest_dir is missing: '$build_dest_dir'"
+    return 1
+  fi
+}
+
+# initialize deployment for deploy.sh
+# TODO: fetch dependancies? gothub docopts gox govvv go.yml
+deploy_init()
+{
+  local dest=${1:-deployment.yml}
+  local template="$(cat << END
+---
+# deploy.sh template - produced by deploy.sh init $(date "+%Y-%m-%d %H:%M:%S")
+# build os/arch for gox
+build:
+  - darwin/386
+  - darwin/amd64
+  - linux/386
+  - linux/amd64
+  - linux/arm
+  - windows/amd64
+target: name_of_the_binary_to_be_built
+releases:
+  # yaml keys must match the git tag
+  v0.1:
+    name: "ovh-cli for shell v0.1"
+    description: |
+      Your first descption.
+
+      bla bal
+
+      you can put some more key:
+        - this thing
+        - that thing too
+
+      it doesn't have to be yaml formated thought.
+END
+)"
+  if [[ -e $dest ]] ; then
+    echo "destination file exists: '$dest' remove it first"
+    return 1
+  fi
+
+  echo "$template" > $dest
+  local ret=$?
+  if [[ $ret -eq 0 ]] ; then
+    echo "'$dest' created OK"
+  else
+    echo "something goes wrong while creating '$dest'"
+  fi
+
+  return $ret
+}
+
+# ###################################################################### main select option
+
 if [[ $0 == $BASH_SOURCE ]] ; then
   # bash strict mode
   set -euo pipefail
 
+  # verify the Go environment and dependancies
   check_env
 
-  # we add our repository path to run our local docopts binary
-  # you will have to build it first of course.
-  PATH=$(dirname $0):$PATH
-  source $DOCOPTS_PATH/docopts.sh --auto -G "$@"
-  docopt_print_ARGS -G
+  # parse command line argument with docopts
+  source docopts.sh --auto -G "$@"
+  if $ARGS_debug ; then
+    docopt_print_ARGS -G
+  fi
 
+  # early argument action, no deep action required
+  if $ARGS_init ; then
+    # TODO: create get_ldflags.sh ?
+    deploy_init
+    exit $?
+  fi
+
+  ######################################### argument default
   # fix docopt bug https://github.com/docopt/docopt/issues/386
   ARGS_REMOTE_REPOS=${ARGS_REMOTE_REPOS:-$ARGS_r}
   ARGS_GITHUB_USER=${ARGS_GITHUB_USER:-$ARGS_u}
@@ -301,17 +479,22 @@ if [[ $0 == $BASH_SOURCE ]] ; then
   if [[ -n $ARGS_RELEASE_VERSION ]] ; then
     TAG=$ARGS_RELEASE_VERSION
   else
-    # fetch last tag from git
+    echo "fetch last tag from git..."
     TAG=$(git describe --abbrev=0)
   fi
 
+  # ============================================================ main switch
   if $ARGS_build ; then
+    check_build_dir $BUILD_DEST_DIR
+    target=$(yq.v2 r $DEPLOYMENT_FILE "target")
     echo "build only ..."
     echo "dest build dir: $BUILD_DEST_DIR/"
-    build_binaries $TAG $BUILD_DEST_DIR
+    echo "target: '$target'"
+    build_binaries $TAG $BUILD_DEST_DIR $target
     ls -l $BUILD_DEST_DIR
     exit 0
   elif $ARGS_deploy ; then
+    check_build_dir $BUILD_DEST_DIR
     main_deploy $TAG
   elif $ARGS_delete ; then
     echo "deleting release $GITHUB_USER/$GITHUB_REPO: $TAG"

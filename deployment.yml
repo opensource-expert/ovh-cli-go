@@ -1,0 +1,21 @@
+---
+# build os/arch for gox
+build:
+  - darwin/386
+  - darwin/amd64
+  - linux/386
+  - linux/amd64
+  - linux/arm
+  - windows/amd64
+target: ovh-cli
+releases:
+  # yaml keys must match the git tag
+  v0.1:
+    name: "ovh-cli for shell v0.1"
+    description: |
+      This is our first draft release.
+
+      introduce:
+        - stdin + argument parsing
+        - low tested
+
