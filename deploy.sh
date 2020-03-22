@@ -7,6 +7,10 @@
 #        ./deploy.sh [--debug] delete RELEASE_VERSION
 #        ./deploy.sh [--debug] init
 #
+# Description:
+#   deploy.sh is a wrapper arroung gothub to build and deploy a github release through
+#   github API.
+#
 # Options:
 #   -n                   Dry run, show with version, files and description.
 #   -r REMOTE_REPOS      Specify a REMOTE_REPOS name [default: origin]
@@ -22,7 +26,7 @@
 #   build      only build using gox and deployment.yml config
 #   deploy     prepare and deploy the release
 #   delete     delete the given RELEASE_VERSION from github and all assets
-#   init       initilise deploy.sh environment and creates deployment.yml
+#   init       initilise deploy.sh environment and create deployment.yml
 #
 # deploy.sh reads description and name for releases in deployment.yml
 
@@ -151,19 +155,21 @@ delete_release()
       --tag "$release"
 }
 
-# after build, generate sha256sum for all file in BUILD_DEST_DIR
+# after build, generate sha256sum for all file in $BUILD_DEST_DIR
 # then output all files name from parent directory
 prepare_upload()
 {
   local build_dest_dir=$1
   pushd $build_dest_dir > /dev/null
-  # remove docopts source used for build
-  rm -f sha256sum.txt docopts.go
+  # cleanup
+  rm -f sha256sum.txt
   sha256sum * > sha256sum.txt
   popd > /dev/null
   find $build_dest_dir -type f -a ! -name .\*
 }
 
+# perform the upload to github using gothub
+# which can be very slow
 upload_binaries()
 {
   local release=$1
@@ -209,6 +215,7 @@ get_arch_build_target()
 
 # copy all current project to a folder
 # if $dest_dir is a sub-folder it is excluded
+# NOT USED
 sync_src_to()
 {
   local dest_dir=${1%/}
@@ -224,34 +231,48 @@ sync_src_to()
 build_binaries()
 {
   local release=$1
-  local build_dest_dir=$2
+  local build_dest_dir=${2%/}
   local target=$3
 
   local ldflags
+  local tmp_git_archive=""
+
+  # convert build_dest_dir to fullpath
+  build_dest_dir=$(realpath $build_dest_dir)
 
 	# ldflags are synchronised with Makefile through ./get_ldflags.sh
   # current is an alias for using the current code not a tag
   if [[ $release == current ]] ; then
-    # will use ./VERSION to get the version
-
-    #sync_src_to "$build_dest_dir"
+    # will use ./VERSION to get the version and use current uncommited code
 
     # ldflags are read in the source directory
     # govvv will fail if .git is missing
     ldflags="$(./get_ldflags.sh)"
   else
-    # checkout a release version to $BUILD_DEST_DIR and build it from here
+    # checkout a release version to $TMP_DIR and we will build it from here
 
     # we force the version to be $release.
-    #git archive --format=tar $release | (cd $build_dest_dir && tar xf -)
+    echo "extracting git release $release..."
+    local extract_dir="${target}_$release.$$"
+    git archive --format=tar --prefix="$extract_dir/" $release | (cd $TMP_DIR && tar xf -)
+    tmp_git_archive="$TMP_DIR/$extract_dir"
 
     ldflags="$(./get_ldflags.sh "$(govvv -flags -version "$release")")"
   fi
 
   local osarch="$(get_arch_build_target gox)"
-
   # -output allow to force generated binaries format and destination
-  gox -osarch "$osarch" -output="${build_dest_dir}/${target}_{{.OS}}_{{.Arch}}" -ldflags "$ldflags"
+  local cmd="gox -osarch \"$osarch\" -output=\"${build_dest_dir}/${target}_{{.OS}}_{{.Arch}}\" -ldflags \"$ldflags\""
+  #echo "$cmd"
+  if [[ -d "$tmp_git_archive" ]] ; then
+    pushd "$tmp_git_archive" > /dev/null
+    eval "$cmd"
+    popd > /dev/null
+    rm -rf "$tmp_git_archive"
+  else
+    # from the current directory
+    eval "$cmd"
+  fi
 }
 
 # fetch all yaml subkeys from the given file.yml from key KEY
@@ -277,7 +298,7 @@ GITHUB_USER: $GITHUB_USER
 GITHUB_TOKEN: $GITHUB_TOKEN
 build_dir: $BUILD_DEST_DIR
 repository: $repository
-name: $name
+Mname: $name
 tag: $release
 files: $UPLOAD_FILES
 sha256sum.txt:
@@ -334,7 +355,7 @@ main_deploy()
     exit 0
   else
     if [[ -z $GITHUB_TOKEN ]] ; then
-      echo "GITHUB_TOKEN must be exported"
+      error "GITHUB_TOKEN must be exported"
       return 1
     fi
 
@@ -349,7 +370,7 @@ main_deploy()
         create_release $release_version "$name" "$description"
       else
         echo "use --replace to replace the existing release"
-        echo "only upload new files"
+        echo "only uploading new files..."
       fi
     else
       echo "release doesn't exists yet: $release_version"
@@ -430,7 +451,7 @@ releases:
 END
 )"
   if [[ -e $dest ]] ; then
-    echo "destination file exists: '$dest' remove it first"
+    error "destination file exists: '$dest' remove it first"
     return 1
   fi
 
@@ -439,7 +460,7 @@ END
   if [[ $ret -eq 0 ]] ; then
     echo "'$dest' created OK"
   else
-    echo "something goes wrong while creating '$dest'"
+    error "something goes wrong while creating '$dest'"
   fi
 
   return $ret
@@ -491,6 +512,7 @@ if [[ $0 == $BASH_SOURCE ]] ; then
     echo "dest build dir: $BUILD_DEST_DIR/"
     echo "target: '$target'"
     build_binaries $TAG $BUILD_DEST_DIR $target
+    echo "============================== result:"
     ls -l $BUILD_DEST_DIR
     exit 0
   elif $ARGS_deploy ; then
@@ -500,7 +522,7 @@ if [[ $0 == $BASH_SOURCE ]] ; then
     echo "deleting release $GITHUB_USER/$GITHUB_REPO: $TAG"
     delete_release $TAG
   else
-    echo "no command found: $*"
+    error "no command found: $*"
     exit 1
   fi
 fi

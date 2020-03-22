@@ -9,32 +9,40 @@ It is based on official OVH [github.com/ovh/go-ovh/ovh](https://github.com/ovh/g
 
 ## Installation
 
-```
-go get URL
-```
+You can download precompiled binaries in [releases](https://github.com/opensource-expert/ovh-cli-go/releases).
 
-or download precompiled binaries in release.
+And put it in `/usr/local/bin`
+
+## get the code
+
+```
+go get github.com/opensource-expert/ovh-cli-go
+```
 
 ## Configuration
 
-It use default `~/.ovh.conf` mecanism provided by [go-ovh](https://github.com/ovh/go-ovh#configuration)
+It uses default `~/.ovh.conf` mecanism provided by [go-ovh](https://github.com/ovh/go-ovh#configuration)
 
 ## Usage
 
 ```
-./ovh-cli-go -h
+./ovh-cli -h
 Usage:
-  ovh-cli-go [--debug] METHOD URL_API [JSON_INPUT]
+  ovh-cli [--debug] METHOD URL_API [JSON_INPUT]
 ```
 
 ## Examples
 
 ```
-./ovh-cli-go GET /me
+./ovh-cli GET /me
 ```
 
 pretty print
 
 ```
-./ovh-cli-go GET /me | jq .
+./ovh-cli GET /me | jq .
 ```
+
+## Have fun
+
+`:-)`

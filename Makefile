@@ -10,7 +10,7 @@ GOVVV=${GOPATH}/bin/govvv
 # govvv define main.Version with the contents of ./VERSION file, if exists
 BUILD_FLAGS=$(shell ./get_ldflags.sh)
 ovh-cli: ovh-cli.go Makefile ${GOVVV} VERSION
-	go build -o $@ -ldflags "${BUILD_FLAGS}"
+	go build -o $@ -ldflags "${BUILD_FLAGS} ${LDFLAGS}"
 
 ${GOVVV}:
 	go get github.com/ahmetb/govvv

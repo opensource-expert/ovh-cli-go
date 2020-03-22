@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 #
 # Usage: ./get_ldflags.sh [BUILD_FLAGS]
+#
+# This script is an helper for both Makefile + deploy.sh
 
 set -eu
 build_flags=${1:-}
