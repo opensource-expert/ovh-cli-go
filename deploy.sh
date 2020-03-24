@@ -41,6 +41,13 @@ GITHUB_REPO=ovh-cli-go
 TAG="$(cat VERSION)"
 BUILD_DEST_DIR=build
 TMP_DIR=/tmp
+# this flags will be added to -ldflags
+# See: go tool link -h
+# -s
+#  Omit the symbol table and debug information
+# -w
+#  Omit the DWARF symbol table.
+RELEASE_LDFLAGS="-s -w"
 
 # ====================================================================== helpers
 fail()
@@ -240,7 +247,7 @@ build_binaries()
   # convert build_dest_dir to fullpath
   build_dest_dir=$(realpath $build_dest_dir)
 
-	# ldflags are synchronised with Makefile through ./get_ldflags.sh
+  # ldflags are synchronised with Makefile through ./get_ldflags.sh
   # current is an alias for using the current code not a tag
   if [[ $release == current ]] ; then
     # will use ./VERSION to get the version and use current uncommited code
@@ -261,6 +268,7 @@ build_binaries()
   fi
 
   local osarch="$(get_arch_build_target gox)"
+  ldflags="$RELEASE_LDFLAGS $ldflags"
   # -output allow to force generated binaries format and destination
   local cmd="gox -osarch \"$osarch\" -output=\"${build_dest_dir}/${target}_{{.OS}}_{{.Arch}}\" -ldflags \"$ldflags\""
   #echo "$cmd"
@@ -513,7 +521,7 @@ if [[ $0 == $BASH_SOURCE ]] ; then
     echo "target: '$target'"
     build_binaries $TAG $BUILD_DEST_DIR $target
     echo "============================== result:"
-    ls -l $BUILD_DEST_DIR
+    ls -lh $BUILD_DEST_DIR
     exit 0
   elif $ARGS_deploy ; then
     check_build_dir $BUILD_DEST_DIR

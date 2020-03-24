@@ -1,12 +1,13 @@
 ---
 # build os/arch for gox
 build:
-  - darwin/386
+  # - darwin/386
   - darwin/amd64
   - linux/386
   - linux/amd64
   - linux/arm
   - windows/amd64
+  - freebsd/amd64
 target: ovh-cli
 releases:
   # yaml keys must match the git tag

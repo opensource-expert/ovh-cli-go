@@ -182,8 +182,13 @@ func main() {
 
 	var bytes []byte
 	json_input, err := arguments.String("JSON_INPUT")
-	if err != nil && len(json_input) > 0 {
-		bytes = []byte(json_input)
+	if err == nil {
+		if len(json_input) > 0 {
+			Debug_print("JSON_INPUT copied to []bytes: '%s'\n", json_input)
+			bytes = []byte(json_input)
+		}
+	} else {
+		Debug_print("JSON_INPUT can't be fetched: %v\n", err)
 	}
 
 	//======================================================================
