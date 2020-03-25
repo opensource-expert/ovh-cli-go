@@ -19,4 +19,15 @@ releases:
       introduce:
         - stdin + argument parsing
         - low tested
+  v0.2:
+    name: "ovh-cli for shell v0.2 alpha"
+    description: |
+      OVH cli for OVH api for command line shell.
 
+      Changes:
+        - This fix JSON_INPUT read fail
+        - remove darwin/386 add freebsd/amd64 binaries
+        - remove symbols from binaries (-s -w)
+
+      Introduce:
+        - first bats test

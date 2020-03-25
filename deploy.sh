@@ -306,7 +306,7 @@ GITHUB_USER: $GITHUB_USER
 GITHUB_TOKEN: $GITHUB_TOKEN
 build_dir: $BUILD_DEST_DIR
 repository: $repository
-Mname: $name
+name: $name
 tag: $release
 files: $UPLOAD_FILES
 sha256sum.txt:
