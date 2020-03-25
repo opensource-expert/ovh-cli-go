@@ -1,20 +1,17 @@
 # TODO list
 
-## debug
-
-`JSON_INPUT` arg doesn't work
+## GET convert JSON input to QueryString ?
 
 ```
-PUT /cloud/project/3554d1c5d638452f94854da78af239c2/instance/8e552d6a-5d51-4680-9b86-3e7801ae8c36 '{"instanceName" : "pipo"}'
+  myovh_cli GET /domain/zone/$domain/record \
+    "{ \"subDomain\" : \"$subdomain\", \"fieldType\" : \"$fieldType\" }"
 ```
 
-but it works
-
 ```
-echo '{"instanceName" : "pipo"}' | ./ovh-cli --debug PUT /cloud/project/3554d1c5d638452f94854da78af239c2/instance/8e552d6a-5d51-4680-9b86-3e7801ae8c36
+  local url="/domain/zone/$domain/record?subDomain=$subdomain&fieldType=$fieldType"
+  ovh-cli GET "$url" | jq -r '.[0]'
 ```
 
-- add a test, release v0.2
 
 ## move deploy.sh to its own project
 

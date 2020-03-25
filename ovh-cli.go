@@ -7,7 +7,6 @@ package main
 
 import (
 	"context"
-	//"encoding/json"
 	"fmt"
 	// because I miss some OVH internal yet, to pass raw JSON string directly
 	"github.com/acrazing/cheapjson"
@@ -17,6 +16,7 @@ import (
 	"github.com/ovh/go-ovh/ovh"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 )
@@ -152,6 +152,36 @@ func Debug_print(f string, args ...interface{}) {
 	}
 }
 
+func format_headers(h map[string][]string) string {
+	var s string
+	for k, v := range h {
+		s += fmt.Sprintf("   %s : %s\n", k, v)
+	}
+
+	return s
+}
+
+func Debug_dump_request(req *http.Request) {
+	if Debug {
+		Debug_print("request Header:\n%s", format_headers(req.Header))
+		req_body, err := ioutil.ReadAll(req.Body)
+		if err == nil {
+			if len(req_body) > 0 {
+				Debug_print("request Body: %s\n", string(req_body))
+			} else {
+				Debug_print("request Body: empty\n")
+			}
+		}
+	}
+}
+
+func Debug_dump_response(response *http.Response) {
+	if Debug {
+		Debug_print("response Status: %d\n", response.StatusCode)
+		Debug_print("response Header:\n%s", format_headers(response.Header))
+	}
+}
+
 // ====================================================================== main
 
 func main() {
@@ -216,12 +246,15 @@ func main() {
 
 	Debug_print("stdin bytes '%v' %d '%s'\n", bytes, len(bytes), string(bytes))
 	Debug_print("Call: %s %s stdin: %v\n", method, path, bytes != nil)
-	var data interface{}
 
+	// I don't know yet how to pass row JSON text to ovh.NewRequest()
+	// So I Unmarshal() it first and the original NewRequest() will Marshal() it back.
+	var data interface{}
 	if len(bytes) > 0 {
 		json_parsed_value, err := cheapjson.Unmarshal(bytes)
 		if err != nil {
-			panic(err)
+			fmt.Fprintf(os.Stderr, "input JSON parser error: %s\n", err)
+			os.Exit(1)
 		}
 		data = json_parsed_value.Value()
 	}
@@ -233,20 +266,15 @@ func main() {
 		panic(err)
 	}
 	req = req.WithContext(ctx)
-	Debug_print("%v\n", req)
+
+	Debug_dump_request(req)
+
 	response, err := client.Do(req)
 	if err != nil {
 		panic(err)
 	}
 
-	if Debug {
-		var s string
-		// extrac response Header
-		for k, v := range response.Header {
-			s += fmt.Sprintf("%s : %s\n", k, v)
-		}
-		Debug_print("response: %d \n %s\n", response.StatusCode, s)
-	}
+	Debug_dump_response(response)
 
 	// Read all the response body
 	defer response.Body.Close()
