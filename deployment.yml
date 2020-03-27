@@ -31,3 +31,11 @@ releases:
 
       Introduce:
         - first bats test
+  v0.3:
+    name: "ovh-cli for shell v0.3 alpha2"
+    description: |
+      OVH cli for OVH api for command line shell.
+
+      Changes:
+        - This fix stdin read fail from file input `ovh-cli GET /me <<< "\"input\""`
+        - use a bats test suite for running our tests

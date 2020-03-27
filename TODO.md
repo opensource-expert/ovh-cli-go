@@ -1,5 +1,9 @@
 # TODO list
 
+## test Examples in Usage in test suite
+
+See: ovh-cli.go
+
 ## GET convert JSON input to QueryString ?
 
 ```
